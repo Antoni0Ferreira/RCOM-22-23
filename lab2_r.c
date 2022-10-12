@@ -29,6 +29,81 @@
 #define DISC (0x0B)
 
 volatile int STOP = FALSE;
+enum STATE = {START, FLAG_RCV, A_RCV, C_RCV, BCC_ok, STOP};
+
+enum STATE state = START;
+
+int receiveFrame(unsigned char &a, unsigned char &c){
+    
+    
+    while(state != STOP){
+        unsigned char buf; 
+
+        read(fd, &buf, 1);
+        
+        switch (STATE) {
+            case START:
+                if(buf == FLAG)
+                    state = FLAG_RCV;
+                break;
+            case FLAG_RCV:
+                if(buf == A){
+                    state = A_RCV;
+                    a = buf;
+                }
+                else if(buf == FLAG)
+                    state = FLAG_RCV;
+                else
+                    state = START;
+                break;
+            case A_RCV:
+                if( /*C VÁLIDO*/){
+                    state = C_RCV;
+                    c = buf;
+                }
+                else if(buf == FLAG)
+                    state = FLAG_RCV;
+                else
+                    state = START;
+                break;
+            case C_RCV:
+                if(buf == FLAG){
+                    
+                }
+                break;
+            case BCC_OK:
+                if(buf == FLAG)
+                    state = STOP;
+                else
+                    state = START;
+                break;
+            
+        }
+            
+        if(memcmp(buf[0], FLAG,1) || memcmp(buf[4], FLAG,1)){
+            
+            //TERMINAR
+        }
+        if(memcmp(buf[1] ^ buf[2], buf[3],1) != 0){
+            //TERMINAR
+        }
+        switch (buf[2]){
+            case SET: //iniciar conexao, responder UA
+                
+                write(fd, cmd, 5);
+                break;
+                
+            case UA: //deu erro (?)
+                
+                break;
+            case DISC: //TERMINAR CONEXAO
+                disconnect = TRUE;
+                write(fd, cmd, 5);
+                break;
+            
+        }
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -98,35 +173,7 @@ int main(int argc, char *argv[])
     unsigned char cmd[] = {FLAG,A,UA,BCC,FLAG};
     while(!disconnect){
 
-        // Loop for input
-        unsigned char buf[5] = {0}; 
-        
-        for(int i = 0; i < 5; i++){
-            read(fd, buf+i, 1);
-            printf("%x\n", buf[i]);
-        }
-        if(memcmp(buf[0], FLAG,1) || memcmp(buf[4], FLAG,1)){
-            
-            //TERMINAR
-        }
-        if(memcmp(buf[1] ^ buf[2], buf[3],1) != 0){
-            //TERMINAR
-        }
-        switch (buf[2]){
-            case SET: //iniciar conexao, responder UA
-                
-                write(fd, cmd, 5);
-                break;
-                
-            case UA: //deu erro (?)
-                
-                break;
-            case DISC: //TERMINAR CONEXAO
-                disconnect = TRUE;
-                write(fd, cmd, 5);
-                break;
-            
-        }
+        //receiveFrame()  // se retornar -1 (?) é disconnect
         
         
     
