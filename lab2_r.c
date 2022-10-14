@@ -29,6 +29,65 @@
 #define DISC (0x0B)
 
 volatile int STOP = FALSE;
+enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STP};
+
+enum STATE state = START;
+
+
+int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c){
+    
+    
+    while(state != STP){
+        unsigned char buf; 
+
+        read(fd, &buf, 1);
+        if(buf != 0x00 && buf != 0x7e){
+            printf("%x\n", buf);
+        }
+        
+        switch (state) {
+            case START:
+                if(buf == FLAG)
+                    state = FLAG_RCV;
+                break;
+            case FLAG_RCV:
+                if(buf == A){
+                    state = A_RCV;
+                    (*fr_a) = buf;
+                }
+                else if(buf == FLAG)
+                    state = FLAG_RCV;
+                else
+                    state = START;
+                break;
+            case A_RCV:
+                if( TRUE){
+                    state = C_RCV;
+                    (*fr_c) = buf;
+                }
+                else if(buf == FLAG)
+                    state = FLAG_RCV;
+                else
+                    state = START;
+                break;
+            case C_RCV:
+                if(buf == FLAG){
+                    state = FLAG_RCV;
+                }
+                else
+                    state = BCC_OK;
+                break;
+            case BCC_OK:
+                if(buf == FLAG)
+                    state = STP;
+                else
+                    state = START;
+                break;
+            
+        }
+        
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -74,7 +133,7 @@ int main(int argc, char *argv[])
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -96,39 +155,16 @@ int main(int argc, char *argv[])
     printf("New termios structure set\n");
     int disconnect = FALSE;
     unsigned char cmd[] = {FLAG,A,UA,BCC,FLAG};
-    while(!disconnect){
+    int i = 0;
+    while(i < 3){
 
-        // Loop for input
-        unsigned char buf[5] = {0}; 
-        
-        for(int i = 0; i < 5; i++){
-            read(fd, buf+i, 1);
-            printf("%x\n", buf[i]);
-        }
-        if(memcmp(buf[0], FLAG,1) || memcmp(buf[4], FLAG,1)){
-            
-            //TERMINAR
-        }
-        if(memcmp(buf[1] ^ buf[2], buf[3],1) != 0){
-            //TERMINAR
-        }
-        switch (buf[2]){
-            case SET: //iniciar conexao, responder UA
-                
-                write(fd, cmd, 5);
-                break;
-                
-            case UA: //deu erro (?)
-                
-                break;
-            case DISC: //TERMINAR CONEXAO
-                disconnect = TRUE;
-                write(fd, cmd, 5);
-                break;
-            
-        }
-        
-        
+        unsigned char a,c;
+        receiveFrame(fd, &a, &c);
+        state = START;
+        i++;
+        /*if(c == SET){
+            write(fd, cmd, 5);
+        }  */
     
     }
 

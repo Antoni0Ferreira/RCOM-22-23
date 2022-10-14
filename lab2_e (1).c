@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
+#include <signal.h>
 
 // Baudrate settings are defined in <asm/termbits.h>, which is
 // included by <termios.h>
@@ -32,15 +33,60 @@ volatile int STOP = FALSE;
 
 int alarmEnabled = FALSE;
 int alarmCount = 0;
+int alarmDone = FALSE;
 
 // Alarm function handler
 void alarmHandler(int signal)
 {
     alarmEnabled = FALSE;
     alarmCount++;
+    alarmDone = TRUE;
 
     printf("Alarm #%d\n", alarmCount);
 }
+
+//int sendFrame(unsigned char *buf, int size)
+int sendFrame(int fd){
+    int sent = FALSE;
+    unsigned char cmd[] = {FLAG,A,SET,BCC,FLAG};
+
+    while(alarmCount < 3 && !sent){
+        if (alarmEnabled == FALSE)
+        {
+            int bytes = write(fd, cmd, 5);
+            printf("escrevi %d\n", bytes);
+
+            alarm(3); // Set alarm to be triggered in 3s
+
+            alarmEnabled = TRUE;
+
+            unsigned char bufReceive[5] = {0};
+
+            while(!alarmDone && read(fd, bufReceive , 1) == 0){}
+
+            if(alarmDone){
+                alarmDone = FALSE;
+                continue;
+            }
+
+            printf("%x\n", bufReceive[0]);
+
+            for(int i = 1; i < 5; i++){
+                read(fd, bufReceive + i, 1);
+                printf("%x\n", bufReceive[i]);
+
+            }
+            if(bufReceive[2] == 0x07){
+                alarm(0);
+                sent = TRUE;
+            } 
+        }
+
+    }
+    
+}
+
+
 
 int main(int argc, char *argv[])
 {
@@ -87,7 +133,7 @@ int main(int argc, char *argv[])
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -106,52 +152,20 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
+    // Set alarm function handler
+    (void)signal(SIGALRM, alarmHandler);
+
     printf("New termios structure set\n");
-    int disconnect = FALSE;
     unsigned char cmd[] = {FLAG,A,SET,BCC,FLAG};
-    unsigned char cmd2[] = {FLAG,A,DISC,BCC,FLAG};
-    int bytes = write(fd, cmd, 5);
-    for(int i = 0; i < 5; i++){
-        printf("%x\n",cmd[i]);
-    }
-    int bytes2 = write(fd, cmd2, 5);
-    for(int i = 0; i < 5; i++){
-        printf("%x\n",cmd2[i]);
-    }
-
-    unsigned char buf[5] = {0};
+    //unsigned char cmd2[] = {FLAG,A,DISC,BCC,FLAG};
     
-    for(int i = 0; i < 5; i++){
 
-        read(fd, buf + i, 1);
-        printf("%x\n", buf[i]);
+    // int bytes2 = write(fd, cmd2, 5);
+    // for(int i = 0; i < 5; i++){
+    //     printf("%x\n",cmd2[i]);
+    // }
+	sendFrame(fd);
 
-    }
-    if(memcmp(buf[0],FLAG,1) || memcmp(buf[4],FLAG,1)){
-           //Terminar
-    }
-
-    if(memcmp(buf[1],A,1)){
-           //Terminar
-    }
-
-    if(memcmp(buf[1] ^ buf[2],buf[3],1)){
-           //Terminar
-    }
-
-    switch(buf[2]){
-        case UA:
-            break;
-        case SET:
-            //error
-            break;
-        case DISC:
-            //error
-            break;
-        default:
-            break;
-
-    }
     
 
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
