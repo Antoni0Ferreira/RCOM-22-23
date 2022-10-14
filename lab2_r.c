@@ -29,6 +29,7 @@
 #define DISC (0x0B)
 
 volatile int STOP = FALSE;
+<<<<<<< HEAD
 enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STP};
 
 enum STATE state = START;
@@ -46,6 +47,21 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c){
         }
         
         switch (state) {
+=======
+enum STATE = {START, FLAG_RCV, A_RCV, C_RCV, BCC_ok, STOP};
+
+enum STATE state = START;
+
+int receiveFrame(unsigned char &a, unsigned char &c){
+    
+    
+    while(state != STOP){
+        unsigned char buf; 
+
+        read(fd, &buf, 1);
+        
+        switch (STATE) {
+>>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
             case START:
                 if(buf == FLAG)
                     state = FLAG_RCV;
@@ -53,7 +69,11 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c){
             case FLAG_RCV:
                 if(buf == A){
                     state = A_RCV;
+<<<<<<< HEAD
                     (*fr_a) = buf;
+=======
+                    a = buf;
+>>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
                 }
                 else if(buf == FLAG)
                     state = FLAG_RCV;
@@ -61,9 +81,15 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c){
                     state = START;
                 break;
             case A_RCV:
+<<<<<<< HEAD
                 if( TRUE){
                     state = C_RCV;
                     (*fr_c) = buf;
+=======
+                if( /*C VÁLIDO*/){
+                    state = C_RCV;
+                    c = buf;
+>>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
                 }
                 else if(buf == FLAG)
                     state = FLAG_RCV;
@@ -72,6 +98,7 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c){
                 break;
             case C_RCV:
                 if(buf == FLAG){
+<<<<<<< HEAD
                     state = FLAG_RCV;
                 }
                 else
@@ -80,12 +107,46 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c){
             case BCC_OK:
                 if(buf == FLAG)
                     state = STP;
+=======
+                    
+                }
+                break;
+            case BCC_OK:
+                if(buf == FLAG)
+                    state = STOP;
+>>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
                 else
                     state = START;
                 break;
             
         }
+<<<<<<< HEAD
         
+=======
+            
+        if(memcmp(buf[0], FLAG,1) || memcmp(buf[4], FLAG,1)){
+            
+            //TERMINAR
+        }
+        if(memcmp(buf[1] ^ buf[2], buf[3],1) != 0){
+            //TERMINAR
+        }
+        switch (buf[2]){
+            case SET: //iniciar conexao, responder UA
+                
+                write(fd, cmd, 5);
+                break;
+                
+            case UA: //deu erro (?)
+                
+                break;
+            case DISC: //TERMINAR CONEXAO
+                disconnect = TRUE;
+                write(fd, cmd, 5);
+                break;
+            
+        }
+>>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
     }
 }
 
@@ -158,6 +219,7 @@ int main(int argc, char *argv[])
     int i = 0;
     while(i < 3){
 
+<<<<<<< HEAD
         unsigned char a,c;
         receiveFrame(fd, &a, &c);
         state = START;
@@ -165,6 +227,11 @@ int main(int argc, char *argv[])
         /*if(c == SET){
             write(fd, cmd, 5);
         }  */
+=======
+        //receiveFrame()  // se retornar -1 (?) é disconnect
+        
+        
+>>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
     
     }
 
