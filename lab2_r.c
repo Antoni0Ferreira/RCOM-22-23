@@ -29,21 +29,29 @@
 #define DISC (0x0B)
 
 volatile int STOP = FALSE;
-enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STP};
+enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA_RCVG, BCC2_OK, STP};
 
 enum STATE state = START;
 
+int sendFrame(int fd, unsigned char *cmd){
 
-int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c){
+	write(fd, cmd, 5);
+	return 0;
+}
+
+
+int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned char *buffer){
     
     
     while(state != STP){
         unsigned char buf; 
+        unsigned char bcc2;
 
         read(fd, &buf, 1);
         if(buf != 0x00 && buf != 0x7e){
             printf("%x\n", buf);
         }
+        int index = 1;
         
         switch (state) {
             case START:
@@ -78,11 +86,31 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c){
                     state = BCC_OK;
                 break;
             case BCC_OK:
-                if(buf == FLAG)
+            	if((*fr_c) == 0x40 || (*fr_c) == 0x00){
+            		state = DATA_RCVG;
+            		buffer[0] = buf;
+            	}
+            	else{
+            		if(buf == FLAG)
                     state = STP;
                 else
                     state = START;
                 break;
+            	}
+            case DATA_RCVG:
+            	if(buf == FLAG /*e se ultimo byte lido não tiver sido esc*/)
+            	{	state = STP;
+            		bcc2 = buffer[i-1];
+            	}
+            	//if (buf == ESC) pôr boleano a true (lastWasEsc)
+            	else{
+            		buffer[i] = buf;
+            		i += 1;
+            		
+            	}
+            	
+            	
+                
             
         }
         
@@ -154,17 +182,26 @@ int main(int argc, char *argv[])
 
     printf("New termios structure set\n");
     int disconnect = FALSE;
-    unsigned char cmd[] = {FLAG,A,UA,BCC,FLAG};
-    int i = 0;
-    while(i < 3){
+    
+    while(!disconnect){
 
         unsigned char a,c;
+        unsigned char cmd[5];
+        
         receiveFrame(fd, &a, &c);
         state = START;
-        i++;
-        /*if(c == SET){
-            write(fd, cmd, 5);
-        }  */
+        
+        if(c == SET){
+        	cmd = {FLAG,A,UA,BCC,FLAG};
+        	sendFrame(fd, cmd);
+        }
+        else if(c == DISC){
+        	cmd = {FLAG,A,DISC,BCC,FLAG};
+        	sendFrame(fd, cmd);
+        }
+        else if(c == UA){
+        	disconnect = TRUE;
+        }
     
     }
 
