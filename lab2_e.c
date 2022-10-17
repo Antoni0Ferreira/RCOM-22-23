@@ -39,7 +39,7 @@ int alarmEnabled = FALSE;
 int alarmCount = 0;
 int alarmDone = FALSE;
 
-enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA_RCVG, BCC2_OK, STP};
+enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STP};
 
 enum STATE state = START;
 
