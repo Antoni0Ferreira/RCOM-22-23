@@ -28,12 +28,20 @@
 #define UA 0x07
 #define BCC (A ^ SET)
 #define DISC 0x0B
+#define RR0 0x05
+#define RR1 0x85
+#define REJ0 0x01
+#define REJ1 0x81
 
 volatile int STOP = FALSE;
 
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 int alarmDone = FALSE;
+
+enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA_RCVG, BCC2_OK, STP};
+
+enum STATE state = START;
 
 // Alarm function handler
 void alarmHandler(int signal)
@@ -45,45 +53,100 @@ void alarmHandler(int signal)
     printf("Alarm #%d\n", alarmCount);
 }
 
-//int sendFrame(unsigned char *buf, int size)
-int sendFrame(int fd){
-    int sent = FALSE;
-    unsigned char cmd[] = {FLAG,A,SET,BCC,FLAG};
+int receiveFrame(int fd){
+	unsigned char buf, c;
+	
+	state = START;
+    
+    while(state != STP){
+    	read(fd, buf, 1);
+    	switch (state){
+    		case START:
+				if(buf == FLAG)
+					state = FLAG_RCV;
+				break;
+			case FLAG_RCV:
+				if(buf == A){
+					state = A_RCV;
+				}
+				else if(buf == FLAG)
+					state = FLAG_RCV;
+				else
+					state = START;
+				break;
+			case A_RCV:
+				if(buf == FLAG)
+					state = FLAG_RCV;
+				else {
+					state = C_RCV;
+					c = buf;
+				}
+				break;
+			case C_RCV:
+				if(buf == FLAG){
+					state = FLAG_RCV;
+				}
+				else
+					state = BCC_OK;
+				break;
+			case BCC_OK:
+				if(buf == FLAG)
+					state = STP;
+				else
+					state = START;
+				break;
+    	}
+    }
+    switch (c){
+    	case UA:
+    		return 0;
+    	case RR0: 
+    		return 1;
+    	case RR1:
+    		return 2;
+    	case REJ0:
+    		return 3;
+    	case REJ1:
+    		return 4;
+    	case DISC:
+    		return 5; 
+    }
+    
+    return -1;
+}
 
+
+int sendFrame(int fd, unsigned char *cmd, int size){ //retorno da funcao -> int consoante o byte C que recebeu (UA, RR, REJ, DISC, !sent)
+    int sent = FALSE;
+    
+	int r = -1;
     while(alarmCount < 3 && !sent){
-        if (alarmEnabled == FALSE)
-        {
-            int bytes = write(fd, cmd, 5);
+        if (alarmEnabled == FALSE){
+        
+            int bytes = write(fd, cmd, size);
             printf("escrevi %d\n", bytes);
 
             alarm(3); // Set alarm to be triggered in 3s
 
             alarmEnabled = TRUE;
+            
+			r = receiveFrame(fd);
+			
+			if(state == STP){ //se tiver recebido retransmissão
+				sent = TRUE;
+				alarm(0);
+			}
+            
+            //printf("%x\n", bufReceive[i]);
 
-            unsigned char bufReceive[5] = {0};
-
-            while(!alarmDone && read(fd, bufReceive , 1) == 0){}
-
-            if(alarmDone){
-                alarmDone = FALSE;
-                continue;
-            }
-
-            printf("%x\n", bufReceive[0]);
-
-            for(int i = 1; i < 5; i++){
-                read(fd, bufReceive + i, 1);
-                printf("%x\n", bufReceive[i]);
-
-            }
-            if(bufReceive[2] == 0x07){
-                alarm(0);
-                sent = TRUE;
-            } 
         }
-
     }
     
+    if(alarmCount == 3){
+    	r = 6; //numero de tentativas de envio excedidas, terminar execução (return na main)
+    }
+    
+	return r;
 }
 
 
@@ -133,7 +196,7 @@ int main(int argc, char *argv[])
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
+    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -156,15 +219,15 @@ int main(int argc, char *argv[])
     (void)signal(SIGALRM, alarmHandler);
 
     printf("New termios structure set\n");
-    unsigned char cmd[] = {FLAG,A,SET,BCC,FLAG};
-    //unsigned char cmd2[] = {FLAG,A,DISC,BCC,FLAG};
     
-
-    // int bytes2 = write(fd, cmd2, 5);
-    // for(int i = 0; i < 5; i++){
-    //     printf("%x\n",cmd2[i]);
-    // }
-	sendFrame(fd);
+    unsigned char cmd[] = {FLAG,A,SET,BCC,FLAG};
+    int size = 5;
+    
+	int r = sendFrame(fd, cmd, size);
+	if(r == 6){
+		return 0;	
+	}
+	state = START;
 
     
 
