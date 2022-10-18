@@ -29,51 +29,41 @@
 #define DISC (0x0B)
 
 volatile int STOP = FALSE;
-<<<<<<< HEAD
-enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STP};
+enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA_RCVG, BCC2_OK, STP};
 
 enum STATE state = START;
 
+int sendFrame(int fd, unsigned char *cmd){
 
-int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c){
+	int bytes = write(fd, cmd, 5);
+	printf("escrevi! %d \n",bytes);
+	return 0;
+}
+
+
+int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned char *buffer){
     
     
     while(state != STP){
         unsigned char buf; 
+        unsigned char bcc2;
 
         read(fd, &buf, 1);
-        if(buf != 0x00 && buf != 0x7e){
-            printf("%x\n", buf);
-        }
+		printf("%x\n", buf);
+
+        int index = 1;
         
         switch (state) {
-=======
-enum STATE = {START, FLAG_RCV, A_RCV, C_RCV, BCC_ok, STOP};
-
-enum STATE state = START;
-
-int receiveFrame(unsigned char &a, unsigned char &c){
-    
-    
-    while(state != STOP){
-        unsigned char buf; 
-
-        read(fd, &buf, 1);
-        
-        switch (STATE) {
->>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
             case START:
+            	printf("start\n");
                 if(buf == FLAG)
                     state = FLAG_RCV;
                 break;
             case FLAG_RCV:
+            	printf("flag_RCV\n");
                 if(buf == A){
                     state = A_RCV;
-<<<<<<< HEAD
                     (*fr_a) = buf;
-=======
-                    a = buf;
->>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
                 }
                 else if(buf == FLAG)
                     state = FLAG_RCV;
@@ -81,15 +71,10 @@ int receiveFrame(unsigned char &a, unsigned char &c){
                     state = START;
                 break;
             case A_RCV:
-<<<<<<< HEAD
+            	printf("A_RCV\n");
                 if( TRUE){
                     state = C_RCV;
                     (*fr_c) = buf;
-=======
-                if( /*C VÁLIDO*/){
-                    state = C_RCV;
-                    c = buf;
->>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
                 }
                 else if(buf == FLAG)
                     state = FLAG_RCV;
@@ -97,57 +82,48 @@ int receiveFrame(unsigned char &a, unsigned char &c){
                     state = START;
                 break;
             case C_RCV:
+            	printf("C_RCV\n");
                 if(buf == FLAG){
-<<<<<<< HEAD
                     state = FLAG_RCV;
                 }
                 else
                     state = BCC_OK;
                 break;
             case BCC_OK:
-                if(buf == FLAG)
-                    state = STP;
-=======
-                    
-                }
-                break;
-            case BCC_OK:
-                if(buf == FLAG)
-                    state = STOP;
->>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
-                else
-                    state = START;
-                break;
+            	printf("BCC_OK\n");
+            	if((*fr_c) == 0x40 || (*fr_c) == 0x00){
+            		state = DATA_RCVG;
+            		buffer[0] = buf;
+            	}
+            	else{
+            		if(buf == FLAG)
+                    	state = STP;
+                	else
+                    	state = START;
+                
+            	}
+            	break;
+            case DATA_RCVG:
+            	printf("DATA\n");
+            	if(buf == FLAG /*e se ultimo byte lido não tiver sido esc*/)
+            	{	state = STP;
+            		bcc2 = buffer[index-1];
+            	}
+            	//if (buf == ESC) pôr boleano a true (lastWasEsc)
+            	else{
+            		buffer[index] = buf;
+            		index += 1;
+            		
+            	}
+            	
+            	
+                
             
         }
-<<<<<<< HEAD
         
-=======
-            
-        if(memcmp(buf[0], FLAG,1) || memcmp(buf[4], FLAG,1)){
-            
-            //TERMINAR
-        }
-        if(memcmp(buf[1] ^ buf[2], buf[3],1) != 0){
-            //TERMINAR
-        }
-        switch (buf[2]){
-            case SET: //iniciar conexao, responder UA
-                
-                write(fd, cmd, 5);
-                break;
-                
-            case UA: //deu erro (?)
-                
-                break;
-            case DISC: //TERMINAR CONEXAO
-                disconnect = TRUE;
-                write(fd, cmd, 5);
-                break;
-            
-        }
->>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
     }
+    printf("sai!\n");
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -194,7 +170,7 @@ int main(int argc, char *argv[])
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
+    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -215,23 +191,26 @@ int main(int argc, char *argv[])
 
     printf("New termios structure set\n");
     int disconnect = FALSE;
-    unsigned char cmd[] = {FLAG,A,UA,BCC,FLAG};
-    int i = 0;
-    while(i < 3){
+    
+    while(!disconnect){
 
-<<<<<<< HEAD
         unsigned char a,c;
-        receiveFrame(fd, &a, &c);
+        unsigned char *buf;
+        
+        receiveFrame(fd, &a, &c,buf);
         state = START;
-        i++;
-        /*if(c == SET){
-            write(fd, cmd, 5);
-        }  */
-=======
-        //receiveFrame()  // se retornar -1 (?) é disconnect
         
-        
->>>>>>> 955aaa44c095bcb4e92fdbc6bc977c8fa4d36df4
+        if(c == SET){
+        	unsigned char cmd[5] = {FLAG,A,UA,BCC,FLAG};
+        	sendFrame(fd, cmd);
+        }
+        else if(c == DISC){
+        	unsigned char cmd[5] = {FLAG,A,DISC,BCC,FLAG};
+        	sendFrame(fd, cmd);
+        }
+        else if(c == UA){
+        	disconnect = FALSE;
+        }
     
     }
 
