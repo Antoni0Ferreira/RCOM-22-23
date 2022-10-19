@@ -21,46 +21,81 @@
 
 #define BUF_SIZE 256
 
-#define FLAG (0x7E)
-#define A (0x03)
-#define SET (0x03)
-#define UA (0x07)
-#define BCC (A^UA)
-#define DISC (0x0B)
+#define FLAG 0x7E
+#define A 0x03
+#define SET 0x03
+#define UA 0x07
+#define BCC (A ^ SET)
+#define DISC 0x0B
+#define RR0 0x05
+#define RR1 0x85
+#define REJ0 0x01
+#define REJ1 0x81
 
 volatile int STOP = FALSE;
 enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA_RCVG, BCC2_OK, STP};
 
 enum STATE state = START;
 
+int destuffing(unsigned char *cmd, int size, unsigned char *result){
+	
+	int foundEsc = FALSE;
+	int j = 0;
+	for(int i = 0; i < size; i++){
+		if(foundEsc){
+			if(cmd[i] == 0x5E){
+				result[j] = 0x7E;
+			}
+			else if(cmd[i] == 0x5D){
+				result[j] = 0x7D;
+			}
+			j++;
+			foundEsc = FALSE;
+		}
+		else{
+			if(cmd[i] == 0x7D){
+				foundEsc = TRUE;
+			}
+			else{
+				result[j] = cmd[i];
+				j++;
+			}
+		}
+	}
+	return j; 
+	
+}
+
 int sendFrame(int fd, unsigned char *cmd){
 
 	int bytes = write(fd, cmd, 5);
-	printf("escrevi! %d \n",bytes);
 	return 0;
 }
 
 
 int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned char *buffer){
     
-    
+    printf("frame: ");
     while(state != STP){
         unsigned char buf; 
         unsigned char bcc2;
 
-        read(fd, &buf, 1);
+        int bytes = read(fd, &buf, 1);
+        if(bytes == 0) {
+        	continue;
+        }
 		printf("%x\n", buf);
 
         int index = 1;
         
         switch (state) {
             case START:
-            	printf("start\n");
+            	
                 if(buf == FLAG)
                     state = FLAG_RCV;
                 break;
             case FLAG_RCV:
-            	printf("flag_RCV\n");
+            	
                 if(buf == A){
                     state = A_RCV;
                     (*fr_a) = buf;
@@ -71,7 +106,6 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned char
                     state = START;
                 break;
             case A_RCV:
-            	printf("A_RCV\n");
                 if( TRUE){
                     state = C_RCV;
                     (*fr_c) = buf;
@@ -82,7 +116,7 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned char
                     state = START;
                 break;
             case C_RCV:
-            	printf("C_RCV\n");
+            	
                 if(buf == FLAG){
                     state = FLAG_RCV;
                 }
@@ -90,7 +124,7 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned char
                     state = BCC_OK;
                 break;
             case BCC_OK:
-            	printf("BCC_OK\n");
+            	
             	if((*fr_c) == 0x40 || (*fr_c) == 0x00){
             		state = DATA_RCVG;
             		buffer[0] = buf;
@@ -104,7 +138,6 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned char
             	}
             	break;
             case DATA_RCVG:
-            	printf("DATA\n");
             	if(buf == FLAG /*e se ultimo byte lido não tiver sido esc*/)
             	{	state = STP;
             		bcc2 = buffer[index-1];
@@ -122,7 +155,6 @@ int receiveFrame(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned char
         }
         
     }
-    printf("sai!\n");
     return 0;
 }
 
@@ -169,8 +201,8 @@ int main(int argc, char *argv[])
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
+    newtio.c_cc[VTIME] = 30; // Inter-character timer unused
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -195,9 +227,11 @@ int main(int argc, char *argv[])
     while(!disconnect){
 
         unsigned char a,c;
-        unsigned char *buf;
+        unsigned char *buf = malloc(1000);
+        unsigned char *destuffBuf = malloc(1000);
         
         receiveFrame(fd, &a, &c,buf);
+        destuffing(buf,1000,destuffBuf);
         state = START;
         
         if(c == SET){
@@ -209,7 +243,15 @@ int main(int argc, char *argv[])
         	sendFrame(fd, cmd);
         }
         else if(c == UA){
-        	disconnect = FALSE;
+        	disconnect = TRUE;
+        }
+        else if(c == 0x00){
+        	unsigned char cmd[5] = {FLAG,A,RR0,BCC,FLAG};
+        	sendFrame(fd, cmd);
+        }
+        else if(c == 0x40){
+            unsigned char cmd[5] = {FLAG,A,RR1,BCC,FLAG};
+        	sendFrame(fd, cmd);
         }
     
     }
@@ -228,3 +270,4 @@ int main(int argc, char *argv[])
 
     return 0;
 }
+
