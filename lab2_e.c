@@ -48,27 +48,26 @@ void alarmHandler(int signal)
     alarmEnabled = FALSE;
     alarmCount++;
     alarmDone = TRUE;
-    state = STP;
 
     printf("Alarm #%d\n", alarmCount);
 }
 
 int byteStuffing(unsigned char *cmd, int size, unsigned char *result){
-	result = malloc(size);
 	int sizeAux = size;
-	int j = 0;
-	for(int i = 0; i < size; i++){
+	int j = 1;
+	result[0] = FLAG;
+	for(int i = 1; i < size-1; i++){
 
 		if(cmd[i] == 0x7e){ //se encontrar flag
 			sizeAux++;
-			result = realloc(&result,sizeAux);
+			result = realloc(result,sizeAux);
 			result[j] = 0x7d;
 			j++;
 			result[j] = 0x5e;
 		}
 		else if(cmd[i] == 0x7d){ //se encontrar esc
 			sizeAux++;
-			result = realloc(&result,sizeAux);
+			result = realloc(result,sizeAux);
 			result[j] = 0x7d;
 			j++;
 			result[j] = 0x5d;
@@ -78,7 +77,8 @@ int byteStuffing(unsigned char *cmd, int size, unsigned char *result){
 		j++;
 		 
 	}
-	return j;
+	result[sizeAux-1] = FLAG;
+	return sizeAux;
 }
 
 int receiveFrame(int fd){
@@ -86,9 +86,8 @@ int receiveFrame(int fd){
 	
 	state = START;
     
-    while(state != STP){
+    while((state != STP) &&(!alarmDone)){
     	read(fd, &buf, 1);
-    	printf("%x\n",buf);
     	switch (state){
     		case START:
 				if(buf == FLAG)
@@ -121,13 +120,13 @@ int receiveFrame(int fd){
 			case BCC_OK:
 				if(buf == FLAG){
 					state = STP;
-					printf("vou pro STP\n");
 				}
 				else
 					state = START;
 				break;
     	}
     }
+   
     switch (c){
     	case UA:
     		return 0;
@@ -149,20 +148,25 @@ int receiveFrame(int fd){
 
 int sendFrame(int fd, unsigned char *cmd, int size){ //retorno da funcao -> int consoante o byte C que recebeu (UA, RR, REJ, DISC, !sent)
     int sent = FALSE;
+    alarmCount = 0;
+    alarmEnabled = FALSE;
+    state = START;
     
 	int r = -1;
+	
     while(alarmCount < 3 && !sent){
         if (alarmEnabled == FALSE){
         
             int bytes = write(fd, cmd, size);
+            if(cmd[2] == UA) return 5; 
             printf("escrevi %d\n", bytes);
 
             alarm(3); // Set alarm to be triggered in 3s
 
             alarmEnabled = TRUE;
             
+            
 			r = receiveFrame(fd);
-			printf("r - %d\n", r);
 			
 			if(state == STP){ //se tiver recebido retransmissão
 				sent = TRUE;
@@ -227,8 +231,8 @@ int main(int argc, char *argv[])
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
+    newtio.c_cc[VTIME] = 30; // Inter-character timer unused
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -252,15 +256,59 @@ int main(int argc, char *argv[])
 
     printf("New termios structure set\n");
     
-    unsigned char cmd[] = {FLAG,A,UA,BCC,FLAG};
+    unsigned char set[] = {FLAG,A,SET,BCC,FLAG};
     int size = 5;
-    unsigned char result[size];
-    
-    int newSize = byteStuffing(cmd,size,)
-	int r = sendFrame(fd, cmd, size);
-	if(r == 6){
-		return 0;	
+    //unsigned char *result = malloc(size);
+    //int newSize = byteStuffing(cmd,size,result);
+	int r = sendFrame(fd, set, size);
+	if(r != 0){
+		return 0;
 	}
+	int index = 0;
+	int dataLength = 20;
+	int frameLength = 8;
+	unsigned char data[] = {0x00, 0x01, 0x02, 0x03, 0x04,
+						   0x05, 0x06, 0x07, 0x08, 0x09,
+						   0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+						   0x0F, 0x10, 0x11, 0x12, 0x13}; 
+	unsigned char *smallData = malloc(frameLength);
+	int n = 0;
+	while(index < dataLength){
+		smallData[0] = FLAG;
+		smallData[1] = A;
+		if(n == 0){
+			smallData[2] = 0x00;
+		}
+		else{
+			smallData[2] = 0x40;
+		}
+		smallData[3] = smallData[2] ^ A;
+		unsigned char BCC2 = 0x00;
+		for(int i = 4; i < frameLength - 2;i++){
+			BCC2 ^= data[index];
+			smallData[i] = data[index];
+			index++;
+		}
+		smallData[frameLength - 2] = BCC2;
+		smallData[frameLength - 1] = FLAG;
+		
+		sendFrame(fd, smallData, frameLength);
+		
+		BCC2 = 0X00;
+		n = (n + 1) % 2;
+		printf("index - %d\n", index);
+	}
+	
+	unsigned char disc[] = {FLAG,A,DISC,BCC,FLAG};
+    r = sendFrame(fd, disc, size);
+    
+    unsigned char ua[] = {FLAG,A,UA,BCC,FLAG};
+    r = sendFrame(fd, ua, size);
+    
+	if(r == 6 || r == 5){
+		return 0;	//sai, disconnect
+	}
+	
 	state = START;
 
     
@@ -275,4 +323,6 @@ int main(int argc, char *argv[])
 
     return 0;
 }
+
+
 

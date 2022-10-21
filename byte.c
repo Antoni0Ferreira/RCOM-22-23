@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define FALSE 0
+#define TRUE 1
+
 #define FLAG 0x7E
 #define A 0x03
 #define SET 0x03
@@ -11,6 +14,35 @@
 #define RR1 0x85
 #define REJ0 0x01
 #define REJ1 0x81
+
+int destuffing(unsigned char *cmd, int size, unsigned char *result){
+	
+	int foundEsc = FALSE;
+	int j = 0;
+	for(int i = 0; i < size; i++){
+		if(foundEsc){
+			if(cmd[i] == 0x5E){
+				result[j] = 0x7E;
+			}
+			else if(cmd[i] == 0x5D){
+				result[j] = 0x7D;
+			}
+			j++;
+			foundEsc = FALSE;
+		}
+		else{
+			if(cmd[i] == 0x7D){
+				foundEsc = TRUE;
+			}
+			else{
+				result[j] = cmd[i];
+				j++;
+			}
+		}
+	}
+	return j; 
+	
+}
 
 int byteStuffing(unsigned char *cmd, int size, unsigned char *result){
 	int sizeAux = size;
@@ -38,20 +70,29 @@ int byteStuffing(unsigned char *cmd, int size, unsigned char *result){
 		 
 	}
 	result[sizeAux-1] = FLAG;
-	return j;
+	return sizeAux;
 }
 
 
 int main() {
 	int size = 11;
-	unsigned char result[11];
+	unsigned char *result = malloc(size);
+	
 	unsigned char cmd[11] = {FLAG,A,SET,BCC,0x12, 0x14, 0x7E, 0x34, 0x7D,0x04,FLAG};
 	int newSize = byteStuffing(cmd, size, result);
 	
+	unsigned char *result2 = malloc(newSize);
 	printf("newSize - %d\n", newSize);
-	for(int i = 0; i < 3; i++){
+	for(int i = 0; i < newSize; i++){
 		printf("%x\n",result[i]);
+	}
+	
+	int newSize2 = destuffing(result, newSize, result2);
+	printf("newSize2 - %d\n", newSize2);
+	for(int i = 0; i < newSize2; i++){
+		printf("%x\n",result2[i]);
 	}
 	
 	return 0;
 }
+
