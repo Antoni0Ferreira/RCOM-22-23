@@ -54,7 +54,7 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
         if(bytes == 0) {
         	continue;
         }
-		printf("%x ", buf);
+		//printf("%x ", buf);
 
         
         
@@ -66,7 +66,7 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
                 break;
             case FLAG_RCV:
             	
-                if(buf == A){
+                if(buf == A || buf == 0x01){
                     state_r = A_RCV;
                     (*fr_a) = buf;
                     a = buf;
