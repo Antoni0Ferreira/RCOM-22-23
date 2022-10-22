@@ -65,7 +65,7 @@ int receiveFrame_t(int fd){
 					state_t = FLAG_RCV;
 				break;
 			case FLAG_RCV:
-				if(buf == A){
+				if(buf == A || buf == 0x01){
 					state_t = A_RCV;
 				}
 				else if(buf == FLAG)
@@ -117,7 +117,7 @@ int receiveFrame_t(int fd){
 }
 
 
-int sendFrame_t(int fd, unsigned char *cmd, int size){ //retorno da funcao -> int consoante o byte C que recebeu (UA, RR, REJ, DISC, !sent)
+int sendFrame_t(int fd, unsigned char *cmd, int size, int timeout, int numTries){ //retorno da funcao -> int consoante o byte C que recebeu (UA, RR, REJ, DISC, !sent)
     int sent = FALSE;
     alarmCount = 0;
     alarmEnabled = FALSE;
@@ -125,14 +125,14 @@ int sendFrame_t(int fd, unsigned char *cmd, int size){ //retorno da funcao -> in
     
 	int r = -1;
 	
-    while(alarmCount < 3 && !sent){
+    while(alarmCount < numTries && !sent){
         if (alarmEnabled == FALSE){
         
             int bytes = write(fd, cmd, size);
             if(cmd[2] == UA) return 5; 
             printf("escrevi %d\n", bytes);
 
-            alarm(3); // Set alarm to be triggered in 3s
+            alarm(timeout); // Set alarm to be triggered in 3s
 
             alarmEnabled = TRUE;
             
@@ -149,9 +149,10 @@ int sendFrame_t(int fd, unsigned char *cmd, int size){ //retorno da funcao -> in
         }
     }
     
-    if(alarmCount == 3){
+    if(alarmCount == numTries){
     	r = 6; //numero de tentativas de envio excedidas, terminar execução (return na main)
     }
     
 	return r;
 }
+
