@@ -1,14 +1,15 @@
 #include "transmissor.h"
+#include "receptor.h"
 
 
-volatile int STOP = FALSE;
+volatile int STOP_t = FALSE;
 
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 int alarmDone = FALSE;
 
 
-enum STATE state = START;
+enum STATE state_t = START;
 
 // Alarm function handler
 void alarmHandler(int signal)
@@ -16,7 +17,7 @@ void alarmHandler(int signal)
     alarmEnabled = FALSE;
     alarmCount++;
     alarmDone = TRUE;
-	state = START;
+	state_t = START;
     printf("Alarm #%d\n", alarmCount);
 }
 
@@ -24,6 +25,7 @@ int byteStuffing(unsigned char *cmd, int size, unsigned char *result){
 	int sizeAux = size;
 	int j = 1;
 	result[0] = FLAG;
+	printf("antes do stuffing, size = %d\n",size); 
 	for(int i = 1; i < size-1; i++){
 
 		if(cmd[i] == 0x7e){ //se encontrar flag
@@ -45,6 +47,7 @@ int byteStuffing(unsigned char *cmd, int size, unsigned char *result){
 		j++;
 		 
 	}
+	printf("depois do stuffing, size = %d\n", sizeAux);
 	result[sizeAux-1] = FLAG;
 	return sizeAux;
 }
@@ -52,45 +55,45 @@ int byteStuffing(unsigned char *cmd, int size, unsigned char *result){
 int receiveFrame_t(int fd){
 	unsigned char buf, c;
 	
-	state = START;
+	state_t = START;
     
-    while((state != STP) && (!alarmDone)){
+    while((state_t != STP) && (!alarmDone)){
     	read(fd, &buf, 1);
-    	switch (state){
+    	switch (state_t){
     		case START:
 				if(buf == FLAG)
-					state = FLAG_RCV;
+					state_t = FLAG_RCV;
 				break;
 			case FLAG_RCV:
 				if(buf == A){
-					state = A_RCV;
+					state_t = A_RCV;
 				}
 				else if(buf == FLAG)
-					state = FLAG_RCV;
+					state_t = FLAG_RCV;
 				else
-					state = START;
+					state_t = START;
 				break;
 			case A_RCV:
 				if(buf == FLAG)
-					state = FLAG_RCV;
+					state_t = FLAG_RCV;
 				else {
-					state = C_RCV;
+					state_t = C_RCV;
 					c = buf;
 				}
 				break;
 			case C_RCV:
 				if(buf == FLAG){
-					state = FLAG_RCV;
+					state_t = FLAG_RCV;
 				}
 				else
-					state = BCC_OK;
+					state_t = BCC_OK;
 				break;
 			case BCC_OK:
 				if(buf == FLAG){
-					state = STP;
+					state_t = STP;
 				}
 				else
-					state = START;
+					state_t = START;
 				break;
     	}
     }
@@ -118,7 +121,7 @@ int sendFrame_t(int fd, unsigned char *cmd, int size){ //retorno da funcao -> in
     int sent = FALSE;
     alarmCount = 0;
     alarmEnabled = FALSE;
-    state = START;
+    state_t = START;
     
 	int r = -1;
 	
@@ -136,7 +139,7 @@ int sendFrame_t(int fd, unsigned char *cmd, int size){ //retorno da funcao -> in
             
 			r = receiveFrame_t(fd);
 			
-			if(state == STP){ //se tiver recebido retransmissão
+			if(state_t == STP){ //se tiver recebido retransmissão
 				sent = TRUE;
 				alarm(0);
 			}

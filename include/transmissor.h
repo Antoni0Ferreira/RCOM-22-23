@@ -29,8 +29,6 @@
 #define REJ0 0x01
 #define REJ1 0x81
 
-enum STATE {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STP};
-
 void alarmHandler(int signal);
 
 int byteStuffing(unsigned char *cmd, int size, unsigned char *result);

@@ -1,8 +1,8 @@
 #include "receptor.h"
 
-volatile int STOP = FALSE;
+volatile int STOP_r = FALSE;
 
-enum STATE state = START;
+enum STATE state_r = START;
 
 int byteDestuffing(unsigned char *cmd, int size, unsigned char *result){
 	
@@ -35,19 +35,18 @@ int byteDestuffing(unsigned char *cmd, int size, unsigned char *result){
 
 int sendFrame_r(int fd, unsigned char *cmd){
 
-	int bytes = write(fd, cmd, 5);
+	write(fd, cmd, 5);
 	return 0;
 }
 
 
 int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned char *buffer){
-    state = START;
+    state_r = START;
     
-    int correctBcc1 = TRUE, correctBcc2 = TRUE;
-    unsigned char bcc2,bcc2Verify = 0x00;
+    int correctBcc1 = TRUE;
     int index = 1;
     unsigned char a = 0x00, c = 0x00;
-    while(state != STP){
+    while(state_r != STP){
         unsigned char buf; 
         
 
@@ -55,33 +54,33 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
         if(bytes == 0) {
         	continue;
         }
-		printf("%x\n", buf);
+		printf("%x ", buf);
 
         
         
-        switch (state) {
+        switch (state_r) {
             case START:
             	
                 if(buf == FLAG)
-                    state = FLAG_RCV;
+                    state_r = FLAG_RCV;
                 break;
             case FLAG_RCV:
             	
                 if(buf == A){
-                    state = A_RCV;
+                    state_r = A_RCV;
                     (*fr_a) = buf;
                     a = buf;
                 }
                 else if(buf == FLAG)
-                    state = FLAG_RCV;
+                    state_r = FLAG_RCV;
                 else
-                    state = START;
+                    state_r = START;
                 break;
             case A_RCV:
             	if(buf == FLAG)
-                    state = FLAG_RCV;
+                    state_r = FLAG_RCV;
                 else{
-                    state = C_RCV;
+                    state_r = C_RCV;
                     (*fr_c) = buf;
                     c = buf;
                 }
@@ -90,10 +89,10 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
             case C_RCV:
             	
                 if(buf == FLAG){
-                    state = FLAG_RCV;
+                    state_r = FLAG_RCV;
                 }
                 else{
-                	state = BCC_OK;
+                	state_r = BCC_OK;
                 	unsigned char xor = a^c;
                 	unsigned char compare = buf;
                 	if(memcmp(&xor, &compare, 1)){
@@ -105,21 +104,21 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
             case BCC_OK:
             	
             	if((*fr_c) == 0x40 || (*fr_c) == 0x00){
-            		state = DATA_RCVG;
+            		state_r = DATA_RCVG;
             		buffer[0] = buf;
             	}
             	else{
             		if(buf == FLAG)
-                    	state = STP;
+                    	state_r = STP;
                 	else
-                    	state = START;
+                    	state_r = START;
                 
             	}
             	break;
             case DATA_RCVG:
             	if(buf == FLAG /*e se ultimo byte lido não tiver sido esc*/)
-            	{	state = STP;
-            		bcc2 = buffer[index-1];
+            	{	state_r = STP;
+            		//bcc2 = buffer[index-1];
             	}
             	else{
             		buffer[index] = buf;
@@ -127,6 +126,7 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
             	}            
         }
     }
+    /*
     for(int i = 0; i < index -1 ; i++){
     	bcc2Verify ^= buffer[i];
     }
@@ -141,6 +141,7 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
     if(!correctBcc1){
 
     	return 2;
-    }
-    return 0;
+    }*/
+    printf("\n");
+    return correctBcc1;
 }

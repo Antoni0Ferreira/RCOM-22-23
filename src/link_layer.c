@@ -1,13 +1,19 @@
 // Link layer protocol implementation
 
-#include "link_layer.h"
-#include "receptor.h"
-#include "transmissor.h"
+#include "../include/link_layer.h"
+#include "../include/receptor.h"
+#include "../include/transmissor.h"
+
+#include <stdlib.h>
 
 struct termios oldtio;
 struct termios newtio;
 
+extern FILE *receptorFptr;
+int fd;
 int n = 0;
+LinkLayerRole role;
+int expected = 0;
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -17,15 +23,17 @@ int n = 0;
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
-    int fd = open(serialPortName, O_RDWR | O_NOCTTY);
+	printf("serialPort - %s\n", connectionParameters.serialPort);
+
+    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
+    
+    
 
     if (fd < 0)
     {
-        perror(serialPortName);
+        perror(connectionParameters.serialPort);
         exit(-1);
     }
-
-    
 
     // Save current port settings
     if (tcgetattr(fd, &oldtio) == -1)
@@ -63,18 +71,20 @@ int llopen(LinkLayer connectionParameters)
         exit(-1);
     }
     
-    if(role == LlTx){
+    if(connectionParameters.role == LlTx){
     	unsigned char set[] = {FLAG,A,SET,A^SET,FLAG};
     	sendFrame_t(fd,set,5);
+    	role = LlTx;
     }
-    else if(role == LlRx){
+    else if(connectionParameters.role == LlRx){
     	unsigned char fr_a, fr_c;
-    	unsigned char buffer = malloc(5);
+    	unsigned char *buffer = malloc(5);
     	int retValue = receiveFrame_r(fd, &fr_a, &fr_c, buffer);
-    	if(fr_c == SET && retValue == 0){
+    	if(fr_c == SET && retValue){
 			unsigned char cmd[5] = {FLAG,A,UA,BCC,FLAG};
-			sendFrame_r(fd, cmd, 5);
+			sendFrame_r(fd, cmd);
     	}
+    	role = LlRx;
     }
 
     return fd;
@@ -86,11 +96,12 @@ int llopen(LinkLayer connectionParameters)
 int llwrite(const unsigned char *buf, int bufSize)
 {
 	int frameLength = bufSize + 6;
-    unsigned char *packet = malloc(frameLength);
+	unsigned char *packet = malloc(frameLength);
     
-	n = 0;
+
 	
 	int accepted = FALSE;
+	int index = 0;
 	while(!accepted){
 		
 		packet[0] = FLAG;
@@ -113,7 +124,10 @@ int llwrite(const unsigned char *buf, int bufSize)
 		packet[frameLength - 1] = FLAG;
 		unsigned char *result = malloc(frameLength);
 		int newSize = byteStuffing(packet,frameLength,result);
-		
+		for(int i = 0; i < newSize; i++){
+			printf("%x ", result[i]);
+		}
+		printf("\n");
 		int returnValue = sendFrame_t(fd, result, newSize);
 		
 		if(returnValue != 3 && returnValue != 4) accepted = TRUE;
@@ -130,40 +144,68 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
-    unsigned char a,c;
+    unsigned char headerA, headerC;
     unsigned char *destuffPacket = malloc(1000);
     
-    int r = receiveFrame_r(fd, &a, &c,packet); //consoante o valor retornado pode ser necessario enviar reject
-    									  // 0 -> tudo certo, 1-> reject, 2 -> ignorar
+    int bcc1 = receiveFrame_r(fd, &headerA, &headerC,packet); //consoante o valor retornado pode ser necessario enviar reject
+    									  // 1 -> bcc1 correto, 0 bcc1 errado
+  	
     byteDestuffing(packet,1000,destuffPacket);
     
     
-    if(r == 0){
-    	
-	    if(c == 0x00 && expected == 0){
-	    	unsigned char cmd[5] = {FLAG,A,RR1,BCC,FLAG};
-	    	sendFrame(fd, cmd);
-	    	expected = 1;
-	    }
-	    else if(c == 0x40 && expected == 1){
-	        unsigned char cmd[5] = {FLAG,A,RR0,BCC,FLAG};
-	    	sendFrame(fd, cmd);
-	    	expected = 0;
-	    }
-	    
-    }
-    else if(r == 1){
-    	if(expected == 0){
-	    	unsigned char cmd[5] = {FLAG,A,REJ0,BCC,FLAG};
-	    	sendFrame(fd, cmd);
-	    }
-	    else if(expected == 1){
-	        unsigned char cmd[5] = {FLAG,A,REJ1,BCC,FLAG};
-	    	sendFrame(fd, cmd);
-	    }
-    }
-        
-    return 0;
+		int r = 0;
+		if(destuffPacket[0] == 0x01){
+		
+			int size = destuffPacket[2] * 256 + destuffPacket[3] + 4;
+			
+			unsigned char bcc2 = destuffPacket[size], bcc2Verify = 0x00;
+			
+			for(int i = 0; i < size ; i++){
+				bcc2Verify ^= destuffPacket[i];
+				printf("destuffPacket[%d] - %x, bcc2Verify - %x\n", i, destuffPacket[i], bcc2Verify);
+			}
+			printf("bcc2Verify - %x, bcc2 - %x\n", bcc2Verify, bcc2);
+			if(bcc2Verify == bcc2 && bcc1){
+				r = 0;
+			}
+			else if (bcc1){
+				r = 1;
+			}
+		}
+		
+		printf("r - %d, c - %x\n", r, headerC);
+		if(r == 0){
+			
+			if(headerC == 0x00 && expected == 0){
+				printf("recebi o 0, manda o 1\n");
+				unsigned char cmd[5] = {FLAG,A,RR1,BCC,FLAG};
+				sendFrame_r(fd, cmd);
+				expected = 1;
+			}
+			else if(headerC == 0x40 && expected == 1){
+				printf("recebi o 1, manda o 0\n");
+			    unsigned char cmd[5] = {FLAG,A,RR0,BCC,FLAG};
+				sendFrame_r(fd, cmd);
+				expected = 0;
+			}
+			
+		}
+		else if(r == 1){
+			if(expected == 0){
+				unsigned char cmd[5] = {FLAG,A,REJ0,BCC,FLAG};
+				sendFrame_r(fd, cmd);
+			}
+			else if(expected == 1){
+			    unsigned char cmd[5] = {FLAG,A,REJ1,BCC,FLAG};
+				sendFrame_r(fd, cmd);
+			}
+		}
+
+		if(packet[0] == 3) return 1;
+		    
+		
+	
+	return 0;
 }
 
 ////////////////////////////////////////////////
@@ -171,21 +213,23 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 int llclose(int fd)
 {
+	
 	if(role == LlTx){
+		
 		unsigned char disc[] = {FLAG,A,DISC,BCC,FLAG};
-		r = sendFrame_t(fd, disc, 5);
+		sendFrame_t(fd, disc, 5);
 		
 		unsigned char ua[] = {FLAG,0x01,UA,BCC,FLAG};
-		r = sendFrame_t(fd, ua, 5);
+		sendFrame_t(fd, ua, 5);
 
 	}
 	else if (role == LlRx){
 		unsigned char fr_a, fr_c;
-    	unsigned char buffer = malloc(5);
+    	unsigned char *buffer = malloc(5);
     	int retValue = receiveFrame_r(fd, &fr_a, &fr_c, buffer);
     	if(fr_c == DISC && retValue == 0){
 			unsigned char disc[5] = {FLAG,0x01,DISC,BCC,FLAG};
-			sendFrame_r(fd, disc,5);
+			sendFrame_r(fd, disc);
     	}
     	retValue = receiveFrame_r(fd, &fr_a, &fr_c, buffer);
     	
