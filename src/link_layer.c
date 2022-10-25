@@ -13,6 +13,8 @@ extern FILE *receptorFptr;
 int fd;
 int n = 0;
 LinkLayerRole role;
+int numTries;
+int timeout;
 int expected = 0;
 
 // MISC
@@ -26,6 +28,8 @@ int llopen(LinkLayer connectionParameters)
 	printf("serialPort - %s\n", connectionParameters.serialPort);
 
     fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
+    
+    printf("fd - %d\n", fd);
     
     
 
@@ -51,7 +55,7 @@ int llopen(LinkLayer connectionParameters)
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 30; // Inter-character timer unused
+    newtio.c_cc[VTIME] = 1; // Inter-character timer unused
     newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
@@ -71,10 +75,16 @@ int llopen(LinkLayer connectionParameters)
         exit(-1);
     }
     
+    timeout = connectionParameters.timeout;
+    numTries = connectionParameters.nRetransmissions;
+    
     if(connectionParameters.role == LlTx){
     	unsigned char set[] = {FLAG,A,SET,A^SET,FLAG};
-    	sendFrame_t(fd,set,5);
+    	int r = sendFrame_t(fd,set,5,timeout,numTries);
     	role = LlTx;
+    	if(r == 6){
+    		return -1;
+    	}
     }
     else if(connectionParameters.role == LlRx){
     	unsigned char fr_a, fr_c;
@@ -102,7 +112,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 	
 	int accepted = FALSE;
 	int index = 0;
-	while(!accepted){
+	
 		
 		packet[0] = FLAG;
 		packet[1] = A;
@@ -123,18 +133,20 @@ int llwrite(const unsigned char *buf, int bufSize)
 		packet[frameLength - 2] = BCC2;
 		packet[frameLength - 1] = FLAG;
 		unsigned char *result = malloc(frameLength);
-		int newSize = byteStuffing(packet,frameLength,result);
-		for(int i = 0; i < newSize; i++){
-			printf("%x ", result[i]);
+		for(int i = 0; i < frameLength; i++){
+			printf("%x ", packet[i]);
 		}
-		printf("\n");
-		int returnValue = sendFrame_t(fd, result, newSize);
+		int newSize = byteStuffing(packet,frameLength,result);
 		
-		if(returnValue != 3 && returnValue != 4) accepted = TRUE;
+		printf("\n");
+		int returnValue = sendFrame_t(fd, result, newSize, timeout, numTries);
+		if(returnValue == 6) return -1;
+		
+		
 		
 		n = (n + 1) % 2;
 
-	}
+	
 
     return 0;
 }
@@ -147,22 +159,23 @@ int llread(unsigned char *packet)
     unsigned char headerA, headerC;
     unsigned char *destuffPacket = malloc(1000);
     
-    int bcc1 = receiveFrame_r(fd, &headerA, &headerC,packet); //consoante o valor retornado pode ser necessario enviar reject
+    int bcc1 = receiveFrame_r(fd, &headerA, &headerC,destuffPacket); //consoante o valor retornado pode ser necessario enviar reject
     									  // 1 -> bcc1 correto, 0 bcc1 errado
   	
-    byteDestuffing(packet,1000,destuffPacket);
+    byteDestuffing(destuffPacket,1000,packet);
+    
     
     
 		int r = 0;
-		if(destuffPacket[0] == 0x01){
+		if(packet[0] == 0x01){
 		
-			int size = destuffPacket[2] * 256 + destuffPacket[3] + 4;
+			int size = packet[2] * 256 + packet[3] + 4;
 			
-			unsigned char bcc2 = destuffPacket[size], bcc2Verify = 0x00;
+			unsigned char bcc2 = packet[size], bcc2Verify = 0x00;
 			
 			for(int i = 0; i < size ; i++){
-				bcc2Verify ^= destuffPacket[i];
-				printf("destuffPacket[%d] - %x, bcc2Verify - %x\n", i, destuffPacket[i], bcc2Verify);
+				bcc2Verify ^= packet[i];
+				//printf("destuffPacket[%d] - %x, bcc2Verify - %x\n", i, destuffPacket[i], bcc2Verify);
 			}
 			printf("bcc2Verify - %x, bcc2 - %x\n", bcc2Verify, bcc2);
 			if(bcc2Verify == bcc2 && bcc1){
@@ -217,10 +230,10 @@ int llclose(int fd)
 	if(role == LlTx){
 		
 		unsigned char disc[] = {FLAG,A,DISC,BCC,FLAG};
-		sendFrame_t(fd, disc, 5);
+		sendFrame_t(fd, disc, 5, timeout, numTries);
 		
 		unsigned char ua[] = {FLAG,0x01,UA,BCC,FLAG};
-		sendFrame_t(fd, ua, 5);
+		sendFrame_t(fd, ua, 5, timeout, numTries);
 
 	}
 	else if (role == LlRx){

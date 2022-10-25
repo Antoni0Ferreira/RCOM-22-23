@@ -6,7 +6,6 @@ volatile int STOP_t = FALSE;
 
 int alarmEnabled = FALSE;
 int alarmCount = 0;
-int alarmDone = FALSE;
 
 
 enum STATE state_t = START;
@@ -16,7 +15,6 @@ void alarmHandler(int signal)
 {
     alarmEnabled = FALSE;
     alarmCount++;
-    alarmDone = TRUE;
 	state_t = START;
     printf("Alarm #%d\n", alarmCount);
 }
@@ -57,15 +55,16 @@ int receiveFrame_t(int fd){
 	
 	state_t = START;
     
-    while((state_t != STP) && (!alarmDone)){
-    	read(fd, &buf, 1);
+    while((state_t != STP) && alarmEnabled){
+    	int bytes = read(fd, &buf, 1);
+    	if(bytes == 0) continue;
     	switch (state_t){
     		case START:
 				if(buf == FLAG)
 					state_t = FLAG_RCV;
 				break;
 			case FLAG_RCV:
-				if(buf == A){
+				if(buf == A || buf == 0x01){
 					state_t = A_RCV;
 				}
 				else if(buf == FLAG)
@@ -117,22 +116,22 @@ int receiveFrame_t(int fd){
 }
 
 
-int sendFrame_t(int fd, unsigned char *cmd, int size){ //retorno da funcao -> int consoante o byte C que recebeu (UA, RR, REJ, DISC, !sent)
+int sendFrame_t(int fd, unsigned char *cmd, int size, int timeout, int numTries){ //retorno da funcao -> int consoante o byte C que recebeu (UA, RR, REJ, DISC, !sent)
     int sent = FALSE;
     alarmCount = 0;
     alarmEnabled = FALSE;
     state_t = START;
     
 	int r = -1;
-	
-    while(alarmCount < 3 && !sent){
+	(void)signal(SIGALRM, alarmHandler);
+    while(alarmCount < numTries && !sent){
         if (alarmEnabled == FALSE){
         
             int bytes = write(fd, cmd, size);
             if(cmd[2] == UA) return 5; 
             printf("escrevi %d\n", bytes);
 
-            alarm(3); // Set alarm to be triggered in 3s
+            alarm(timeout); // Set alarm to be triggered in 3s
 
             alarmEnabled = TRUE;
             
@@ -140,7 +139,7 @@ int sendFrame_t(int fd, unsigned char *cmd, int size){ //retorno da funcao -> in
 			r = receiveFrame_t(fd);
 			
 			if(state_t == STP){ //se tiver recebido retransmissão
-				sent = TRUE;
+				if(r != 3 && r != 4){sent = TRUE;}
 				alarm(0);
 			}
 			printf("alarmCount - %d\n", alarmCount);
@@ -149,7 +148,7 @@ int sendFrame_t(int fd, unsigned char *cmd, int size){ //retorno da funcao -> in
         }
     }
     
-    if(alarmCount == 3){
+    if(alarmCount == numTries){
     	r = 6; //numero de tentativas de envio excedidas, terminar execução (return na main)
     }
     

@@ -6,7 +6,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-FILE *receptorFptr;
+
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
@@ -26,19 +26,18 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 			
 			fseek(transmissorFptr,0L,SEEK_END);
 			
-			
-			
 			LinkLayerRole llrole = LlTx;
 			connectionParameters.role = llrole;
 			
-	   		int fd = llopen(connectionParameters);
+	   		int fd = llopen(connectionParameters); //llopen 
+	   		if(fd == -1) return;
 	   		printf("depois do llopen()\n");
 	   		long int fileSize = ftell(transmissorFptr);
 	   		printf("file size - %ld\n", fileSize);
 			long int auxFileSize = fileSize;
 			unsigned char countBytes = 0;
 
-			fseek(transmissorFptr,0L,SEEK_SET);
+			fseek(transmissorFptr,0,SEEK_SET);
 
 			while(auxFileSize > 0){
 				countBytes++;
@@ -77,19 +76,23 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 			buffer[1] = n;
 			buffer[2] = l2;
 			buffer[3] = l1;
+			
+			fseek(transmissorFptr,0,SEEK_SET);
 
 	   		while((bytes = fread(buffer + 4, 1, 496, transmissorFptr)) > 0){
-	   			fseek(transmissorFptr, 496, SEEK_CUR); 
-	   			llwrite(buffer, bytes + 4);
+	   			l1 = bytes & 0xFF;
+	   			bytes = bytes >> 8;
+	   			l2 = bytes & 0xFF;
+	   			buffer[2] = l2;
+				buffer[3] = l1;
+	   			fseek(transmissorFptr, 0, SEEK_CUR);
+	   			int r = llwrite(buffer, (l2*256 + l1) + 4);
+	   			if(r == -1) return;
 				n = (n + 1) % 255;
 				buffer[1] = n;
 
 	   		}
-	   		//printf("bytes fora do while - %d\n", bytes);
-	   		//if(bytes == 0){
-	   		//	llwrite(buffer, bytes + 4);
-	   		//}
-	   		//llwrite end
+	   		
 	   		fclose(transmissorFptr);
 
 			c = 3;
@@ -108,18 +111,28 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
 			llread(packet);
 			
-			printf("li o start, packet[0] = %x\n", packet[0]);
-
-			receptorFptr = fopen(filename, "w");
+			FILE *receptorFptr = fopen(filename, "wb");
+			
+			printf("receptorFptr - %p\n", receptorFptr);
 
 			int ended = 0;
 
-	   		//llread start
 	   		while(!ended){ //enquanto nao receber o end
 	   			ended = llread(packet);
-	   			printf("ended  - %d\n", ended);
-				fwrite(packet + 4, 1, 496, receptorFptr);
+	   			int bytes = packet[2]*256 + packet[3];
+	   			if(ended) break;
+	   			
+				for(int i = 4; i < packet[2] * 256 + packet[3] + 4; i++){
+					printf("%x ", packet[i]);
+				}
+				fwrite(packet + 4, bytes ,1, receptorFptr);
+				
+				printf("receptorFptr - %p\n", receptorFptr);
 	   		}
+	   		
 	   		llclose(fd);
+	   		
+	   		fclose(receptorFptr);
 	}    
+	return;
 }

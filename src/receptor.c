@@ -66,7 +66,7 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
                 break;
             case FLAG_RCV:
             	
-                if(buf == A){
+                if(buf == A || buf == 0x01){
                     state_r = A_RCV;
                     (*fr_a) = buf;
                     a = buf;
@@ -126,22 +126,7 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
             	}            
         }
     }
-    /*
-    for(int i = 0; i < index -1 ; i++){
-    	bcc2Verify ^= buffer[i];
-    }
-    if(bcc2Verify != bcc2){
-    	correctBcc2 = FALSE;
-    }
-
-    if(correctBcc1 && !correctBcc2){ //enviar reject
-
-    	return 1;
-    }
-    if(!correctBcc1){
-
-    	return 2;
-    }*/
+    
     printf("\n");
     return correctBcc1;
 }
