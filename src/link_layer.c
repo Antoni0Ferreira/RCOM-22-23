@@ -97,7 +97,7 @@ int llopen(LinkLayer connectionParameters)
     	role = LlRx;
     }
 
-    return fd;
+    return 1;
 }
 
 ////////////////////////////////////////////////
@@ -142,11 +142,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 		int returnValue = sendFrame_t(fd, result, newSize, timeout, numTries);
 		if(returnValue == 6) return -1;
 		
-		
-		
 		n = (n + 1) % 2;
-
-	
 
     return 0;
 }
@@ -161,7 +157,7 @@ int llread(unsigned char *packet)
     
     int bcc1 = receiveFrame_r(fd, &headerA, &headerC,destuffPacket); //consoante o valor retornado pode ser necessario enviar reject
     									  // 1 -> bcc1 correto, 0 bcc1 errado
-  	
+  	if(!bcc1) return 0;
     byteDestuffing(destuffPacket,1000,packet);
     
     
@@ -207,10 +203,12 @@ int llread(unsigned char *packet)
 			if(expected == 0){
 				unsigned char cmd[5] = {FLAG,A,REJ0,BCC,FLAG};
 				sendFrame_r(fd, cmd);
+				return 2;
 			}
 			else if(expected == 1){
 			    unsigned char cmd[5] = {FLAG,A,REJ1,BCC,FLAG};
 				sendFrame_r(fd, cmd);
+				return 2;
 			}
 		}
 
