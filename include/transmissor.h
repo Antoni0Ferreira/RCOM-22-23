@@ -35,4 +35,4 @@ int byteStuffing(unsigned char *cmd, int size, unsigned char *result);
 
 int receiveFrame_t(int fd);
 
-int sendFrame_t(int fd, unsigned char *cmd, int size, int timeout, int numTries);
+int sendFrame_t(int fd, unsigned char *cmd, int size, int timeout, int numTries); 
