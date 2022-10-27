@@ -118,7 +118,6 @@ int receiveFrame_r(int fd, unsigned char *fr_a, unsigned char *fr_c, unsigned ch
             case DATA_RCVG:
             	if(buf == FLAG /*e se ultimo byte lido não tiver sido esc*/)
             	{	state_r = STP;
-            		//bcc2 = buffer[index-1];
             	}
             	else{
             		buffer[index] = buf;
