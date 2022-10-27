@@ -15,7 +15,6 @@ void alarmHandler(int signal)
 {
     alarmEnabled = FALSE;
     alarmCount++;
-	state_t = START;
     printf("Alarm #%d\n", alarmCount);
 }
 
@@ -141,6 +140,7 @@ int sendFrame_t(int fd, unsigned char *cmd, int size, int timeout, int numTries)
 			if(state_t == STP){ //se tiver recebido retransmissão
 				if(r != 3 && r != 4){sent = TRUE;}
 				alarm(0);
+				alarmEnabled = FALSE;
 			}
 			printf("alarmCount - %d\n", alarmCount);
            
