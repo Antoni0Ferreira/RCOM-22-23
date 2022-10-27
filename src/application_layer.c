@@ -6,6 +6,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+extern int fd;
+
 
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
@@ -29,11 +31,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 			LinkLayerRole llrole = LlTx;
 			connectionParameters.role = llrole;
 			
-	   		int fd = llopen(connectionParameters); //llopen 
-	   		if(fd == -1) return;
-	   		printf("depois do llopen()\n");
+	   		int open = llopen(connectionParameters); //llopen 
+	   		if(open == -1) return;
 	   		long int fileSize = ftell(transmissorFptr);
-	   		printf("file size - %ld\n", fileSize);
+	   		//printf("file size - %ld\n", fileSize);
 			long int auxFileSize = fileSize;
 			unsigned char countBytes = 0;
 
@@ -63,7 +64,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 			}
 
 			llwrite(controlPacket,3 + countBytes); //start
-			printf("escrevi o start\n");
+			
 
 			unsigned char *buffer = malloc(500); // 4 + 496
 	   		int bytes = 0;
@@ -107,32 +108,29 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 			LinkLayerRole llrole = LlRx;
 			connectionParameters.role = llrole;
 			unsigned char *packet = malloc(1000);
-	   		int fd = llopen(connectionParameters);
-
+	   		int open = llopen(connectionParameters);
+            if(open == -1) return;
 			llread(packet);
 			
 			FILE *receptorFptr = fopen(filename, "wb");
-			
-			printf("receptorFptr - %p\n", receptorFptr);
 
 			int ended = 0;
 
-	   		while(!ended){ //enquanto nao receber o end
+	   		while(ended != 1){ //enquanto nao receber o end
 	   			ended = llread(packet);
 	   			int bytes = packet[2]*256 + packet[3];
-	   			if(ended) break;
+	   			if(ended == 1) break;
+	   			if(ended == 2) continue;
 	   			
 				for(int i = 4; i < packet[2] * 256 + packet[3] + 4; i++){
 					printf("%x ", packet[i]);
 				}
 				fwrite(packet + 4, bytes ,1, receptorFptr);
-				
-				printf("receptorFptr - %p\n", receptorFptr);
 	   		}
-	   		
+	   		fclose(receptorFptr);
 	   		llclose(fd);
 	   		
-	   		fclose(receptorFptr);
+	   		
 	}    
 	return;
 }
